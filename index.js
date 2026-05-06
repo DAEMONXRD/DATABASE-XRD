@@ -8,9 +8,14 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
-// എല്ലാ ഡാറ്റയും ഒന്നിച്ച് ലോഡ് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
-const getCombinedData = () => {
-    let combinedData = [];
+// ഗ്ലോബൽ വേരിയബിൾ - ഡാറ്റ മെമ്മറിയിൽ സൂക്ഷിക്കാൻ
+let cachedData = [];
+
+// സെർവർ സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ ഡാറ്റ ലോഡ് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
+const loadDatabase = () => {
+    console.log("Loading database parts into memory...");
+    let tempArray = [];
+    
     for (let i = 1; i <= 6; i++) {
         const fileName = `db_part_${i}.json`;
         const filePath = path.join(__dirname, fileName);
@@ -20,74 +25,66 @@ const getCombinedData = () => {
                 const rawData = fs.readFileSync(filePath, 'utf8');
                 const jsonData = JSON.parse(rawData);
                 
-                // ഡാറ്റ നേരിട്ട് ലിസ്റ്റ് ആണെങ്കിൽ (നമ്മൾ സ്പ്ലിറ്റ് ചെയ്ത പോലെ)
                 if (Array.isArray(jsonData)) {
-                    combinedData = combinedData.concat(jsonData);
-                } 
-                // ഒരുപക്ഷേ പഴയ പോലെ കീ ഉണ്ടെങ്കിൽ
-                else if (jsonData["1-50k"] && Array.isArray(jsonData["1-50k"])) {
-                    combinedData = combinedData.concat(jsonData["1-50k"]);
+                    tempArray = tempArray.concat(jsonData);
+                } else if (jsonData["1-50k"] && Array.isArray(jsonData["1-50k"])) {
+                    tempArray = tempArray.concat(jsonData["1-50k"]);
                 }
+                console.log(`✅ Loaded ${fileName}`);
             } catch (e) {
-                console.error(`Error reading ${fileName}:`, e.message);
+                console.error(`❌ Error reading ${fileName}:`, e.message);
             }
+        } else {
+            console.warn(`⚠️ Warning: ${fileName} not found.`);
         }
     }
-    return combinedData;
+    cachedData = tempArray;
+    console.log(`🚀 Database loaded. Total records: ${cachedData.length}`);
 };
+
+// ആപ്പ് തുടങ്ങുമ്പോൾ തന്നെ ഡാറ്റ ലോഡ് ചെയ്യുന്നു
+loadDatabase();
 
 app.get('/', (req, res) => {
     res.json({
-        message: 'API is running...',
-        developer: 'DaemonXRD'
+        status: 'Online',
+        message: 'Database API is running smoothly',
+        developer: 'DaemonXRD',
+        total_records: cachedData.length
     });
 });
 
 app.get('/api', (req, res) => {
-    const mobile = Number(req.query.number);
+    const mobile = req.query.number;
 
     if (!mobile) {
         return res.status(400).json({ 
-            error: 'Please provide a valid mobile number',
+            error: 'Please provide a mobile number',
             developer: 'DaemonXRD'
         });
     }
 
-    try {
-        const allData = getCombinedData();
-        
-        // മൊബൈൽ നമ്പർ വെച്ച് ഫിൽട്ടർ ചെയ്യുന്നു
-        const foundItem = allData.find(
-            item => Number(item.Phone_Mobile) === mobile
-        );
+    // പവർഫുൾ സെർച്ചിംഗ് (മെമ്മറിയിൽ നിന്ന് നേരിട്ട്)
+    const result = cachedData.find(item => String(item.Phone_Mobile).includes(mobile));
 
-        if (!foundItem) {
-            return res.status(404).json({ 
-                error: 'Mobile number not found',
-                developer: 'DaemonXRD' 
-            });
-        }
-
-        // റിസൾട്ടിനൊപ്പം ഡെവലപ്പർ ക്രെഡിറ്റ്സ് ചേർക്കുന്നു
-        const response = {
-            ...foundItem,
-            developer: 'Developed by DaemonXRD',
-            status: 'Verified Database Result'
-        };
-
-        res.json(response);
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ 
-            error: 'Server Error', 
+    if (!result) {
+        return res.status(404).json({ 
+            error: 'Mobile number not found',
             developer: 'DaemonXRD' 
         });
     }
+
+    // ഡെവലപ്പർ ക്രെഡിറ്റ്സ് ചേർക്കുന്നു
+    res.json({
+        ...result,
+        developer: 'Developed by DaemonXRD',
+        source: 'XRD Legion Database'
+    });
 });
 
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log('Database parts 1-6 integrated.');
-    console.log('Developed by DaemonXRD');
+    console.log(`-------------------------------------------`);
+    console.log(`Server is live on port ${PORT}`);
+    console.log(`Developed by DaemonXRD`);
+    console.log(`-------------------------------------------`);
 });
