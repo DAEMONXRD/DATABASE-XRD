@@ -8,49 +8,37 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
-// ഗ്ലോബൽ വേരിയബിൾ - ഡാറ്റ മെമ്മറിയിൽ സൂക്ഷിക്കാൻ
-let cachedData = [];
-
-// സെർവർ സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ ഡാറ്റ ലോഡ് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
-const loadDatabase = () => {
-    console.log("Loading database parts into memory...");
-    let tempArray = [];
-    
+// ഓരോ ഫയലായി സെർച്ച് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
+const searchInFiles = (mobileNumber) => {
     for (let i = 1; i <= 6; i++) {
         const fileName = `db_part_${i}.json`;
         const filePath = path.join(__dirname, fileName);
-        
+
         if (fs.existsSync(filePath)) {
             try {
                 const rawData = fs.readFileSync(filePath, 'utf8');
                 const jsonData = JSON.parse(rawData);
                 
-                if (Array.isArray(jsonData)) {
-                    tempArray = tempArray.concat(jsonData);
-                } else if (jsonData["1-50k"] && Array.isArray(jsonData["1-50k"])) {
-                    tempArray = tempArray.concat(jsonData["1-50k"]);
+                // ഡാറ്റ ലിസ്റ്റ് ആണോ എന്ന് നോക്കുന്നു
+                const dataArray = Array.isArray(jsonData) ? jsonData : jsonData["1-50k"];
+
+                if (dataArray) {
+                    const found = dataArray.find(item => String(item.Phone_Mobile) === String(mobileNumber));
+                    if (found) return found; // നമ്പർ കിട്ടിയാൽ ഉടൻ ആ ഡാറ്റ തിരിച്ചു നൽകുന്നു
                 }
-                console.log(`✅ Loaded ${fileName}`);
             } catch (e) {
-                console.error(`❌ Error reading ${fileName}:`, e.message);
+                console.error(`Error reading ${fileName}:`, e.message);
             }
-        } else {
-            console.warn(`⚠️ Warning: ${fileName} not found.`);
         }
     }
-    cachedData = tempArray;
-    console.log(`🚀 Database loaded. Total records: ${cachedData.length}`);
+    return null; // ആറ് ഫയലിലും ഇല്ലെങ്കിൽ null നൽകും
 };
-
-// ആപ്പ് തുടങ്ങുമ്പോൾ തന്നെ ഡാറ്റ ലോഡ് ചെയ്യുന്നു
-loadDatabase();
 
 app.get('/', (req, res) => {
     res.json({
-        status: 'Online',
-        message: 'Database API is running smoothly',
+        status: 'Active',
         developer: 'DaemonXRD',
-        total_records: cachedData.length
+        endpoint: '/api?number=YOUR_NUMBER'
     });
 });
 
@@ -64,27 +52,33 @@ app.get('/api', (req, res) => {
         });
     }
 
-    // പവർഫുൾ സെർച്ചിംഗ് (മെമ്മറിയിൽ നിന്ന് നേരിട്ട്)
-    const result = cachedData.find(item => String(item.Phone_Mobile).includes(mobile));
+    try {
+        const result = searchInFiles(mobile);
 
-    if (!result) {
-        return res.status(404).json({ 
-            error: 'Mobile number not found',
+        if (!result) {
+            return res.status(404).json({ 
+                error: 'Mobile number not found in database',
+                developer: 'DaemonXRD' 
+            });
+        }
+
+        // ഫൈനൽ ഔട്ട്‌പുട്ട്
+        res.json({
+            ...result,
+            developer: 'Developed by DaemonXRD',
+            source: 'XRD Legion Secure API'
+        });
+
+    } catch (error) {
+        res.status(500).json({ 
+            error: 'Internal Server Error', 
             developer: 'DaemonXRD' 
         });
     }
-
-    // ഡെവലപ്പർ ക്രെഡിറ്റ്സ് ചേർക്കുന്നു
-    res.json({
-        ...result,
-        developer: 'Developed by DaemonXRD',
-        source: 'XRD Legion Database'
-    });
 });
 
 app.listen(PORT, () => {
-    console.log(`-------------------------------------------`);
-    console.log(`Server is live on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Memory Optimized Search Active`);
     console.log(`Developed by DaemonXRD`);
-    console.log(`-------------------------------------------`);
 });
